@@ -1,0 +1,59 @@
+/* css/print.css */
+body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    color: #000;
+    background-color: #fff; /* Pastikan background putih untuk cetak */
+}
+
+.navbar, footer, .no-print, #fetchRfidItemButton, .remove-item {
+    display: none !important; /* Sembunyikan elemen yang tidak perlu dicetak */
+}
+
+.main-container {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+    border: none;
+}
+
+h1, h2 {
+    color: #000;
+    border-bottom: 2px solid #000;
+    padding-bottom: 5px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+}
+
+th, td {
+    border: 1px solid #666;
+    padding: 8px;
+    text-align: left;
+}
+
+th {
+    background-color: #eee; /* Warna lebih netral untuk cetak */
+}
+
+#borrow_list li {
+    background-color: transparent;
+    border: none;
+    padding: 5px 0;
+    border-bottom: 1px dashed #ccc;
+}
+#borrow_list li span {
+    color: #000;
+}
+
+.print-only {
+    display: block !important; /* Tampilkan elemen khusus cetak */
+}
+
+@page {
+    margin: 1in; /* Atur margin halaman cetak */
+}

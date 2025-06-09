@@ -1,11 +1,10 @@
 <?php
 // File: php/print_receipt.php
 $page_title = "Bukti Peminjaman";
-$base_path = "../"; // Naik satu level untuk mencapai root
+$base_path = "../"; // Untuk path CSS dari folder php
 $is_print_page = true;
-include '../includes/header.php'; // Path relatif dari folder php/
-require_once 'db_connect.php'; // db_connect.php ada di folder yang sama (php/)
-
+include '../includes/header.php'; // Autoload via header
+require_once 'db_connect.php';
 
 if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
     echo "<p class='message error'>ID Transaksi tidak valid.</p>";
@@ -15,7 +14,8 @@ if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
 
 $transaction_id = intval($_GET['id']);
 
-$sql_transaction = "SELECT * FROM transactions WHERE transaction_id = ?";
+// Ambil data transaksi
+$sql_transaction = "SELECT transaction_id, student_name, borrow_date, notes FROM transactions WHERE transaction_id = ?";
 $stmt_transaction = mysqli_prepare($conn, $sql_transaction);
 mysqli_stmt_bind_param($stmt_transaction, "i", $transaction_id);
 mysqli_stmt_execute($stmt_transaction);
@@ -29,7 +29,8 @@ if (!$transaction) {
     exit();
 }
 
-$sql_items = "SELECT i.item_name, i.rfid_tag 
+// Ambil data barang yang dipinjam, pastikan mengambil 'barcode_value'
+$sql_items = "SELECT i.item_name, i.barcode_value 
               FROM borrowed_items bi
               JOIN items i ON bi.item_id = i.item_id
               WHERE bi.transaction_id = ?";
@@ -46,7 +47,7 @@ mysqli_close($conn);
 ?>
 
 <h1>Bukti Peminjaman Inventaris</h1>
-<button onclick="window.print()" class="no-print" style="margin-bottom: 20px; background-color: #007bff;">Cetak Bukti Ini</button>
+<button onclick="window.print()" class="no-print button" style="margin-bottom: 20px; background-color: #007bff;">Cetak Bukti Ini</button>
 
 <div class="receipt-details">
     <p><strong>ID Transaksi:</strong> <?php echo htmlspecialchars($transaction['transaction_id']); ?></p>
@@ -63,7 +64,7 @@ mysqli_close($conn);
                 <tr>
                     <th>No.</th>
                     <th>Nama Barang</th>
-                    <th>Tag RFID</th>
+                    <th>Nilai Barcode</th> <!-- Diubah dari Tag RFID -->
                 </tr>
             </thead>
             <tbody>
@@ -71,7 +72,7 @@ mysqli_close($conn);
                 <tr>
                     <td><?php echo $no++; ?></td>
                     <td><?php echo htmlspecialchars($item['item_name']); ?></td>
-                    <td><?php echo htmlspecialchars($item['rfid_tag']); ?></td>
+                    <td><?php echo htmlspecialchars($item['barcode_value']); ?></td> <!-- Menampilkan barcode_value -->
                 </tr>
                 <?php endforeach; ?>
             </tbody>
@@ -83,25 +84,22 @@ mysqli_close($conn);
     <div class="signature-area print-only" style="margin-top: 50px;">
         <table style="width:100%; border:none;">
             <tr style="border:none;">
-                <td style="width:50%; text-align:center; border:none;">
+                <td style="width:50%; text-align:center; border:none; padding:10px;">
                     <p>Peminjam,</p>
-                    <br><br><br>
+                    <br><br><br><br>
                     <p>( <?php echo htmlspecialchars($transaction['student_name']); ?> )</p>
                 </td>
-                <td style="width:50%; text-align:center; border:none;">
+                <td style="width:50%; text-align:center; border:none; padding:10px;">
                     <p>Petugas Laboratorium,</p>
-                    <br><br><br>
-                    <p>( .......................... )</p>
+                    <br><br><br><br>
+                    <p>( ...................................... )</p>
                 </td>
             </tr>
         </table>
     </div>
     <p class="print-only" style="text-align: center; margin-top: 20px; font-size: 0.8em;">
-        Harap kembalikan barang sesuai dengan kondisi semula.
+        Harap kembalikan barang sesuai dengan kondisi semula dan tepat waktu.
     </p>
 </div>
 
-
-<?php
-include '../includes/footer.php'; // Path relatif dari folder php/
-?>
+<?php include '../includes/footer.php'; ?>

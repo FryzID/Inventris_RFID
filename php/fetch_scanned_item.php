@@ -5,12 +5,13 @@ require_once 'db_connect.php';
 
 header('Content-Type: application/json');
 
-if (isset($_SESSION['last_scanned_rfid_tag'])) {
-    $rfid_tag = $_SESSION['last_scanned_rfid_tag'];
-    $sql = "SELECT item_id, item_name, status FROM items WHERE rfid_tag = ?";
-    
+if (isset($_SESSION['last_scanned_barcode_value'])) {
+    $barcode_value = $_SESSION['last_scanned_barcode_value'];
+    // Query berdasarkan barcode_value
+    $sql = "SELECT item_id, item_name, status FROM items WHERE barcode_value = ?";
+
     if ($stmt = mysqli_prepare($conn, $sql)) {
-        mysqli_stmt_bind_param($stmt, "s", $rfid_tag);
+        mysqli_stmt_bind_param($stmt, "s", $barcode_value);
         if (mysqli_stmt_execute($stmt)) {
             $result = mysqli_stmt_get_result($stmt);
             if ($item = mysqli_fetch_assoc($result)) {
@@ -20,13 +21,11 @@ if (isset($_SESSION['last_scanned_rfid_tag'])) {
                         "item_id" => $item['item_id'],
                         "item_name" => $item['item_name']
                     ]);
-                    // Jangan unset session di sini agar bisa dipanggil lagi jika perlu verifikasi.
-                    // Arduino akan menimpa nilainya saat scan baru.
                 } else {
-                    echo json_encode(["status" => "error", "message" => "Barang dengan tag RFID '".htmlspecialchars($rfid_tag)."' sedang dipinjam."]);
+                    echo json_encode(["status" => "error", "message" => "Barang dengan barcode '".htmlspecialchars($barcode_value)."' sedang dipinjam."]);
                 }
             } else {
-                echo json_encode(["status" => "error", "message" => "Barang dengan tag RFID '".htmlspecialchars($rfid_tag)."' tidak ditemukan."]);
+                echo json_encode(["status" => "error", "message" => "Barang dengan barcode '".htmlspecialchars($barcode_value)."' tidak ditemukan."]);
             }
         } else {
             echo json_encode(["status" => "error", "message" => "Gagal mengeksekusi query."]);
@@ -36,7 +35,9 @@ if (isset($_SESSION['last_scanned_rfid_tag'])) {
         echo json_encode(["status" => "error", "message" => "Gagal mempersiapkan statement SQL."]);
     }
     mysqli_close($conn);
+    // Hapus session setelah diambil agar tidak salah ambil jika tombol ditekan lagi tanpa scan baru
+    // unset($_SESSION['last_scanned_barcode_value']);
 } else {
-    echo json_encode(["status" => "error", "message" => "Belum ada barang yang di-scan via RFID. Silakan scan barang terlebih dahulu."]);
+    echo json_encode(["status" => "error", "message" => "Belum ada barang yang di-scan via Barcode. Silakan scan barang."]);
 }
 ?>

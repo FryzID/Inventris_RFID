@@ -1,6 +1,7 @@
 <?php
 // File: admin/process_edit_item.php
 session_start();
+// require_once dirname(__DIR__) . '/vendor/autoload.php'; // Jika tidak via header
 require_once '../php/db_connect.php';
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
@@ -14,69 +15,96 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $item_id = intval($_POST['item_id']);
     $item_name = trim($_POST['item_name']);
     $description = isset($_POST['description']) ? trim($_POST['description']) : null;
-    $rfid_tag = trim($_POST['rfid_tag']);
-    $status = trim($_POST['status']); // Ambil status dari form
+    $barcode_value_input = trim($_POST['barcode_value']); // Sebelumnya rfid_tag
+    $status = trim($_POST['status']);
 
-    if (empty($item_name) || empty($rfid_tag) || empty($status)) {
-        $_SESSION['admin_message'] = "Nama barang, Tag RFID, dan Status tidak boleh kosong.";
+    // Simpan data form ke session untuk diisi kembali jika error
+    $_SESSION['form_data'] = $_POST;
+    $_SESSION['form_data']['item_id_for_redirect'] = $item_id; // Untuk redirect jika error
+
+    if (empty($item_name) || empty($barcode_value_input) || empty($status)) {
+        $_SESSION['admin_message'] = "Nama barang, Nilai Barcode, dan Status tidak boleh kosong.";
         $_SESSION['admin_message_type'] = "error";
-        // Redirect kembali ke halaman edit dengan ID yang benar
         header("Location: edit_item.php?id=" . $item_id);
         exit();
     }
 
-    // Validasi status
-    if (!in_array($status, ['available', 'borrowed'])) { // Tambahkan status lain jika ada
+    if (!in_array($status, ['available', 'borrowed'])) {
         $_SESSION['admin_message'] = "Status tidak valid.";
         $_SESSION['admin_message_type'] = "error";
         header("Location: edit_item.php?id=" . $item_id);
         exit();
     }
 
-    // Cek apakah RFID tag sudah ada untuk BARANG LAIN
-    $sql_check = "SELECT item_id FROM items WHERE rfid_tag = ? AND item_id != ?";
-    $stmt_check = mysqli_prepare($conn, $sql_check);
-    mysqli_stmt_bind_param($stmt_check, "si", $rfid_tag, $item_id);
-    mysqli_stmt_execute($stmt_check);
-    mysqli_stmt_store_result($stmt_check);
+    // Cek apakah barcode_value sudah ada untuk BARANG LAIN
+    $sql_check = "SELECT item_id FROM items WHERE barcode_value = ? AND item_id != ?";
+    if ($stmt_check = mysqli_prepare($conn, $sql_check)) {
+        mysqli_stmt_bind_param($stmt_check, "si", $barcode_value_input, $item_id);
+        mysqli_stmt_execute($stmt_check);
+        mysqli_stmt_store_result($stmt_check);
 
-    if (mysqli_stmt_num_rows($stmt_check) > 0) {
-        $_SESSION['admin_message'] = "Tag RFID '".htmlspecialchars($rfid_tag)."' sudah terdaftar untuk barang lain.";
-        $_SESSION['admin_message_type'] = "error";
+        if (mysqli_stmt_num_rows($stmt_check) > 0) {
+            $_SESSION['admin_message'] = "Nilai Barcode '".htmlspecialchars($barcode_value_input)."' sudah terdaftar untuk barang lain.";
+            $_SESSION['admin_message_type'] = "error";
+            mysqli_stmt_close($stmt_check);
+            header("Location: edit_item.php?id=" . $item_id);
+            exit();
+        }
         mysqli_stmt_close($stmt_check);
+    } else {
+        $_SESSION['admin_message'] = "Error database saat pengecekan barcode: " . mysqli_error($conn);
+        $_SESSION['admin_message_type'] = "error";
         header("Location: edit_item.php?id=" . $item_id);
         exit();
     }
-    mysqli_stmt_close($stmt_check);
+
 
     // Update barang
-    $sql_update = "UPDATE items SET item_name = ?, description = ?, rfid_tag = ?, status = ? WHERE item_id = ?";
-    $stmt_update = mysqli_prepare($conn, $sql_update);
-    mysqli_stmt_bind_param($stmt_update, "ssssi", $item_name, $description, $rfid_tag, $status, $item_id);
+    // Jika kolom rfid_tag sudah tidak ada, hapus dari query
+    $sql_update = "UPDATE items SET item_name = ?, description = ?, barcode_value = ?, status = ? WHERE item_id = ?";
+    // Jika rfid_tag masih ada dan ingin di-null-kan atau diupdate:
+    // $rfid_tag_val_placeholder = null;
+    // $sql_update = "UPDATE items SET item_name = ?, description = ?, rfid_tag = ?, barcode_value = ?, status = ? WHERE item_id = ?";
 
-    if (mysqli_stmt_execute($stmt_update)) {
-        if (mysqli_stmt_affected_rows($stmt_update) > 0) {
-            $_SESSION['admin_message'] = "Barang '".htmlspecialchars($item_name)."' berhasil diperbarui.";
-            $_SESSION['admin_message_type'] = "success";
+    if ($stmt_update = mysqli_prepare($conn, $sql_update)) {
+        // Sesuaikan jumlah 's' dan 'i'
+        mysqli_stmt_bind_param($stmt_update, "ssssi", $item_name, $description, $barcode_value_input, $status, $item_id);
+        // Jika rfid_tag masih ada:
+        // mysqli_stmt_bind_param($stmt_update, "sssssi", $item_name, $description, $rfid_tag_val_placeholder, $barcode_value_input, $status, $item_id);
+
+        if (mysqli_stmt_execute($stmt_update)) {
+            if (mysqli_stmt_affected_rows($stmt_update) > 0) {
+                $_SESSION['admin_message'] = "Barang '".htmlspecialchars($item_name)."' berhasil diperbarui.";
+                $_SESSION['admin_message_type'] = "success";
+            } else {
+                $_SESSION['admin_message'] = "Tidak ada perubahan data pada barang '".htmlspecialchars($item_name)."' atau barang tidak ditemukan.";
+                $_SESSION['admin_message_type'] = "info";
+            }
+            unset($_SESSION['form_data']); // Hapus data form jika sukses
         } else {
-            $_SESSION['admin_message'] = "Tidak ada perubahan data pada barang '".htmlspecialchars($item_name)."' atau barang tidak ditemukan.";
-            $_SESSION['admin_message_type'] = "info"; // Gunakan 'info' jika tidak ada perubahan
+            $_SESSION['admin_message'] = "Gagal memperbarui barang: " . mysqli_stmt_error($stmt_update);
+            $_SESSION['admin_message_type'] = "error";
+            header("Location: edit_item.php?id=" . $item_id);
+            mysqli_close($conn);
+            exit();
         }
+        mysqli_stmt_close($stmt_update);
     } else {
-        $_SESSION['admin_message'] = "Gagal memperbarui barang: " . mysqli_error($conn);
+        $_SESSION['admin_message'] = "Error database saat update barang: " . mysqli_error($conn);
         $_SESSION['admin_message_type'] = "error";
         header("Location: edit_item.php?id=" . $item_id);
         mysqli_close($conn);
         exit();
     }
-    mysqli_stmt_close($stmt_update);
+
     mysqli_close($conn);
     header("Location: list_items.php");
     exit();
 
 } else {
-    // Jika bukan POST, redirect ke daftar barang
-    header("Location: list_items.php");
+    $_SESSION['admin_message'] = "Akses tidak sah.";
+    $_SESSION['admin_message_type'] = "error";
+    header("Location: list_items.php"); // Redirect ke daftar barang jika bukan POST
     exit();
 }
 ?>

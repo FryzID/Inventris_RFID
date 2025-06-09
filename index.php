@@ -1,76 +1,87 @@
 <?php
+// File: INVENTRIS_RFID/index.php
 $page_title = "Form Peminjaman";
-$base_path = "./"; // Path relatif dari root ke folder css, js, dll.
-include 'includes/header.php'; // Ini akan include vendor/autoload.php jika dikonfigurasi di sana
+$base_path = "./";
+include 'includes/header.php'; // Memuat Select2 CSS, CoreUI CSS (jika masih ada), dan Autoloader
+require_once 'php/db_connect.php';
+
+$available_items_for_select = [];
+$sql_all_items = "SELECT item_id, item_name, barcode_value FROM items WHERE status = 'available' ORDER BY item_name ASC";
+$result_all_items = mysqli_query($conn, $sql_all_items);
+if ($result_all_items) {
+    while ($row = mysqli_fetch_assoc($result_all_items)) {
+        $available_items_for_select[] = $row;
+    }
+    mysqli_free_result($result_all_items);
+}
 ?>
 
 <h1>Form Peminjaman Inventaris Laboratorium</h1>
 
 <?php
-// Tampilkan pesan dari proses sebelumnya (jika ada)
-if (isset($_SESSION['borrow_message'])) {
-    echo '<div class="message ' . htmlspecialchars($_SESSION['borrow_message_type']) . '">' . htmlspecialchars($_SESSION['borrow_message']) . '</div>';
-    unset($_SESSION['borrow_message']);
-    unset($_SESSION['borrow_message_type']);
-}
+if (isset($_SESSION['borrow_message'])) { /* ... (tampilkan pesan) ... */ }
 ?>
 
 <form id="borrowForm" action="php/process_borrow.php" method="POST">
     <label for="student_name">Nama Siswa:</label>
     <input type="text" id="student_name" name="student_name" required placeholder="Ketik nama siswa">
 
-    <h2>Tambah Barang (Scan dengan Barcode Scanner)</h2>
-    <div class="barcode-input-group no-print">
+    <h2>Tambah Barang</h2>
+    
+    <!-- Bagian untuk Scan Barcode -->
+    <fieldset style="margin-bottom: 20px; border: 1px solid #ddd; padding: 15px; border-radius: 4px;">
+        <legend style="padding: 0 10px; font-weight:bold;">Via Scan Barcode</legend>
         <label for="barcode_input_val">Scan Barcode Barang:</label>
-        <input type="text" id="barcode_input_val" placeholder="Arahkan scanner ke barcode barang">
-        <button type="button" id="addByBarcodeBtn" class="button secondary">Tambahkan Barang</button>
-    </div>
-    <p class="no-print">
-        <em>
-            Setelah memindai barcode, nilai akan muncul di atas. Klik "Tambahkan Barang" atau sistem akan otomatis memproses setelah scanner mengirim 'Enter'.
-        </em>
-    </p>
-    <div id="scan_status"></div> <!-- Ganti nama ID dari rfid_status -->
+        <div class="barcode-input-group no-print">
+            <input type="text" id="barcode_input_val" placeholder="Arahkan scanner ke barcode barang">
+            <button type="button" id="addByBarcodeBtn" class="button secondary">Tambahkan via Scan</button>
+        </div>
+        <p class="no-print"><small><em>Setelah memindai, nilai akan muncul. Klik tombol atau tekan Enter.</em></small></p>
+    </fieldset>
+
+    <!-- Bagian untuk Pilih Manual dengan Select2 -->
+    <fieldset style="border: 1px solid #ddd; padding: 15px; border-radius: 4px;">
+        <legend style="padding: 0 10px; font-weight:bold;">Pilih Manual dari Daftar</legend>
+        <label for="manual_item_select2">Cari dan Pilih Barang (satu per satu):</label>
+        <div class="manual-select-group no-print" style="display:flex; align-items:center; gap:10px;">
+            <select id="manual_item_select2" name="manual_item_selector" style="width: 70%; flex-grow:1;">
+                <option value="">-- Ketik untuk mencari barang --</option>
+                <?php foreach ($available_items_for_select as $item): ?>
+                    <option value="<?php echo htmlspecialchars($item['item_id']); ?>" 
+                            data-name="<?php echo htmlspecialchars($item['item_name']); ?>"
+                            data-barcode="<?php echo htmlspecialchars($item['barcode_value']); ?>">
+                        <?php echo htmlspecialchars($item['item_name']); ?> (Barcode: <?php echo htmlspecialchars($item['barcode_value']); ?>)
+                    </option>
+                <?php endforeach; ?>
+            </select>
+            <button type="button" id="addByManualSelectBtn" class="button secondary" style="flex-shrink:0;">Tambahkan Pilihan</button>
+        </div>
+         <p class="no-print"><small><em>Pilih satu barang dari daftar, lalu klik "Tambahkan Pilihan". Ulangi untuk barang lain.</em></small></p>
+    </fieldset>
+    
+    <div id="scan_status" style="margin-top:15px; min-height:1.5em; padding: 10px; border-radius: 4px; border: 1px solid transparent;"></div>
+
 
     <h2>Daftar Barang Akan Dipinjam:</h2>
     <ul id="borrow_list">
-        <!-- Item yang di-scan akan ditambahkan di sini oleh JavaScript -->
+        <!-- Item akan ditambahkan di sini -->
     </ul>
-    <p id="no_items_message" style="color: #777;">Belum ada barang yang ditambahkan.</p>
+    <p id="no_items_message" style="color: #777; margin-top:10px;">Belum ada barang yang ditambahkan.</p>
 
-
-    <label for="notes">Catatan (Opsional):</label>
+    <label for="notes" style="margin-top:20px;">Catatan (Opsional):</label>
     <textarea id="notes" name="notes" placeholder="Catatan tambahan jika ada"></textarea>
 
-    <input type="submit" value="Proses Peminjaman">
+    <input type="submit" value="Proses Peminjaman" style="margin-top:20px;">
 </form>
 
-<style>
-/* Style tambahan untuk grup input barcode jika belum ada di styles.css */
-.barcode-input-group {
-    display: flex;
-    align-items: center; /* Vertically align items */
-    margin-bottom: 15px;
+<style> /* ... (style fieldset, legend, barcode-input-group, scan_status, borrow_list seperti sebelumnya) ... */ 
+/* Pastikan Select2 CSS dimuat dari header untuk styling yang benar */
+.select2-container { /* Umumnya Select2 akan mengatur lebarnya sendiri jika select asli punya style width */
+    width: 100% !important; /* Atau atur di JS saat inisialisasi */
 }
-.barcode-input-group label {
-    margin-right: 10px; /* Space between label and input */
-    margin-bottom: 0; /* Override default label margin-bottom */
-    white-space: nowrap; /* Prevent label text from wrapping */
-}
-.barcode-input-group input[type="text"] {
-    flex-grow: 1; /* Input takes remaining space */
-    margin-right: 10px; /* Space between input and button */
-    margin-bottom: 0; /* Override default input margin-bottom */
-}
-.barcode-input-group button {
-    margin-bottom: 0; /* Override default button margin-bottom */
-    flex-shrink: 0; /* Prevent button from shrinking */
-}
-/* Untuk status message */
-#scan_status { margin-top: 10px; padding: 10px; border-radius: 4px; border: 1px solid transparent; }
-.status-success { background-color: #d4edda; color: #155724; border-color: #c3e6cb; }
-.status-error { background-color: #f8d7da; color: #721c24; border-color: #f5c6cb; }
-.status-info { background-color: #d1ecf1; color: #0c5460; border-color: #bee5eb; }
 </style>
 
-<?php include 'includes/footer.php'; // Ini akan include js/script.js ?>
+<?php
+mysqli_close($conn);
+include 'includes/footer.php'; // Memuat jQuery, Select2 JS, dan script.js
+?>

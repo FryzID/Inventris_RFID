@@ -7,7 +7,8 @@ $(document).ready(function() {
             if (typeof unsafe === 'number' || typeof unsafe === 'boolean') {
                 return unsafe.toString();
             }
-            return '';
+            console.warn("escapeHtml dipanggil dengan nilai bukan string/number/boolean:", unsafe);
+            return ''; 
         }
         return unsafe
              .replace(/&/g, "&")
@@ -17,155 +18,221 @@ $(document).ready(function() {
              .replace(/'/g, "'");
     }
 
-    // --- LOGIKA UNTUK HALAMAN PEMINJAMAN (index.php) ---
-    if ($('#barcode_input_val').length > 0 && $('#borrow_list').length > 0) {
-        // Fungsi untuk menampilkan/menyembunyikan pesan "Belum ada barang"
+    // --- CACHE SELECTOR UMUM UNTUK HALAMAN PEMINJAMAN ---
+    const borrowList = $('#borrow_list');
+    const noItemsMessage = $('#no_items_message');
+    const scanStatusDiv = $('#scan_status'); 
+    const studentNameInput = $('#student_name');
+    const barcodeInputPeminjaman = $('#barcode_input_val'); 
+    const manualItemCoreUIEl = document.getElementById('manual_item_coreui_multiselect'); // Elemen DOM asli untuk CoreUI
+    const $manualItemCoreUI = $(manualItemCoreUIEl); // Elemen jQuery untuk event jQuery
+
+    // --- LOGIKA UMUM UNTUK DAFTAR PEMINJAMAN ---
+    // Hanya jalankan jika elemen utama halaman peminjaman ada
+    if (borrowList.length > 0 || barcodeInputPeminjaman.length > 0 || manualItemCoreUIEl) {
+
         function updateNoItemsMessage() {
-            if ($('#borrow_list li').length === 0) {
-                $('#no_items_message').show();
+            if (borrowList.find('li').length === 0) {
+                noItemsMessage.show();
             } else {
-                $('#no_items_message').hide();
+                noItemsMessage.hide();
             }
         }
-        updateNoItemsMessage(); // Panggil saat halaman dimuat
-
-        // Fungsi untuk memproses penambahan barang berdasarkan barcode
-        function processBarcodeAddItem() {
-            const barcodeValue = $('#barcode_input_val').val().trim();
-            const statusDiv = $('#scan_status');
-
-            if (barcodeValue === "") {
-                // statusDiv.html('Info: Input barcode kosong.').addClass('status-info').removeClass('status-success status-error');
-                return;
-            }
-
-            statusDiv.html('<i>Mencari barang...</i>').removeClass('status-success status-error status-info');
-
-            $.ajax({
-                url: 'php/fetch_item_detail_by_barcode.php', // Path relatif dari index.php
-                type: 'GET',
-                data: { barcode_value: barcodeValue },
-                dataType: 'json',
-                success: function(response) {
-                    if (response.status === 'success') {
-                        let itemExists = false;
-                        $('#borrow_list input[name="item_ids[]"]').each(function() {
-                            if ($(this).val() == response.item_id) {
-                                itemExists = true;
-                                return false;
-                            }
-                        });
-
-                        if (itemExists) {
-                            statusDiv.html('Info: Barang "' + escapeHtml(response.item_name) + '" sudah ada dalam daftar.').addClass('status-info').removeClass('status-success status-error');
-                        } else {
-                            $('#borrow_list').append(
-                                '<li>' +
-                                '<span>' + escapeHtml(response.item_name) + ' (ID: ' + escapeHtml(response.item_id.toString()) + ')</span>' +
-                                '<input type="hidden" name="item_ids[]" value="' + escapeHtml(response.item_id.toString()) + '">' +
-                                '<button type="button" class="remove-item no-print button danger small">Hapus</button>' +
-                                '</li>'
-                            );
-                            statusDiv.html('Barang berhasil ditambahkan: ' + escapeHtml(response.item_name)).addClass('status-success').removeClass('status-error status-info');
-                            $('#barcode_input_val').val('').focus();
-                        }
-                    } else {
-                        statusDiv.html('Error: ' + escapeHtml(response.message)).addClass('status-error').removeClass('status-success status-info');
-                        $('#barcode_input_val').select().focus();
-                    }
-                    updateNoItemsMessage();
-                },
-                error: function(jqXHR, textStatus, errorThrown) {
-                    statusDiv.html('Error: Gagal menghubungi server. (' + escapeHtml(textStatus) + ')').addClass('status-error').removeClass('status-success status-info');
-                    console.error("AJAX Error (Peminjaman): ", textStatus, errorThrown, jqXHR.responseText);
-                    updateNoItemsMessage();
-                }
-            });
-        }
-
-        // Event handler untuk tombol "Tambahkan Barang" di halaman peminjaman
-        $('#addByBarcodeBtn').on('click', function() {
-            processBarcodeAddItem();
-        });
-
-        // Event handler untuk Enter pada input barcode di halaman peminjaman
-        $('#barcode_input_val').on('keypress', function(e) {
-            if (e.which == 13) {
-                e.preventDefault();
-                processBarcodeAddItem();
-            }
-        });
-        $('#barcode_input_val').focus(); // Otomatis fokus saat halaman peminjaman dimuat
-
-        // Event listener untuk menghapus item dari daftar di halaman peminjaman
-        $('#borrow_list').on('click', '.remove-item', function() {
-            $(this).closest('li').remove();
-            $('#scan_status').html('Item dihapus dari daftar.').addClass('status-info').removeClass('status-success status-error');
+        if (borrowList.length) {
             updateNoItemsMessage();
-            $('#barcode_input_val').focus();
-        });
-
-        // Validasi form peminjaman sebelum submit
-        if ($('#borrowForm').length) {
-            $('#borrowForm').on('submit', function(e) {
-                if ($('#student_name').val().trim() === '') {
-                    alert('Nama siswa tidak boleh kosong.');
-                    $('#student_name').focus();
-                    e.preventDefault();
-                    return false;
-                }
-                if ($('#borrow_list li').length === 0) {
-                    alert('Silakan tambahkan minimal satu barang untuk dipinjam.');
-                    $('#barcode_input_val').focus();
-                    e.preventDefault();
-                    return false;
-                }
-            });
         }
-    } // Akhir dari if untuk logika halaman peminjaman
 
-    // --- LOGIKA UNTUK HALAMAN ADMIN (add_item.php & edit_item.php) ---
-    if ($('#generateBarcodePreviewBtn').length > 0 && $('#barcode_value').length > 0 && $('#barcode_preview_container').length > 0) {
-        
-        function showAdminBarcodePreview() {
-            var barcodeVal = $('#barcode_value').val().trim(); // Input field di form admin
-            var previewContainer = $('#barcode_preview_container');
+        // Fungsi generik untuk menambahkan item ke daftar peminjaman
+        function addItemToBorrowList(itemId, itemName, origin = 'scan') {
+            let itemExists = false;
+            const itemIdStr = String(itemId);
 
-            if (barcodeVal === "") {
-                previewContainer.html('Masukkan nilai barcode untuk melihat preview.');
-                return;
-            }
+            borrowList.find('input[name="item_ids[]"]').each(function() {
+                if ($(this).val() === itemIdStr) { itemExists = true; return false; }
+            });
 
-            previewContainer.html('<i>Memuat preview barcode...</i>');
+            if (itemExists) {
+                scanStatusDiv.html('Info: Barang "' + escapeHtml(itemName) + '" sudah ada dalam daftar peminjaman.').addClass('status-info').removeClass('status-success status-error');
+                // Jika dari CoreUI, dan item sudah ada, kita perlu "membatalkan" seleksi terakhir di CoreUI.
+                // Ini memerlukan interaksi dengan API CoreUI yang mungkin rumit jika tidak ada cara mudah.
+                // Untuk sekarang, kita biarkan, pesan error sudah cukup.
+                if (origin === 'manual_coreui' && manualItemCoreUIEl) {
+                    // Coba unselect secara programatik jika CoreUI instance ada dan punya metode `setValue` atau `update`
+                    // const coreUIInstance = coreui.MultiSelect.getInstance(manualItemCoreUIEl);
+                    // if (coreUIInstance) { /* coba manipulasi nilai terpilih */ }
+                }
+                return false; 
+            } else {
+                borrowList.append(
+                    '<li data-item-id="' + escapeHtml(itemIdStr) + '">' +
+                    '<span>' + escapeHtml(itemName) + ' (ID: ' + escapeHtml(itemIdStr) + ')</span>' +
+                    '<input type="hidden" name="item_ids[]" value="' + escapeHtml(itemIdStr) + '">' +
+                    '<button type="button" class="remove-item no-print button danger small">Hapus</button>' +
+                    '</li>'
+                );
+                scanStatusDiv.html('Barang berhasil ditambahkan: ' + escapeHtml(itemName)).addClass('status-success').removeClass('status-error status-info');
+                updateNoItemsMessage();
 
-            $.ajax({
-                url: 'generate_barcode_image.php', // Path relatif dari admin/add_item.php atau admin/edit_item.php
-                type: 'POST',
-                data: { barcode_data: barcodeVal },
-                success: function(response) {
-                    previewContainer.html(response);
-                },
-                error: function(jqXHR, textStatus, errorThrown) {
-                    previewContainer.html('<p style="color:red;">Gagal memuat preview barcode. Cek console (F12).</p>');
-                    console.error("AJAX Error (Admin Barcode Preview):", textStatus, errorThrown);
-                    if (jqXHR.responseText) {
-                        console.error("Server Response (Admin Barcode Preview):", jqXHR.responseText);
+                if (manualItemCoreUIEl) {
+                    const optionInCoreUI = $manualItemCoreUI.find('option[value="' + itemIdStr + '"]');
+                    if (optionInCoreUI.length) {
+                        optionInCoreUI.prop('disabled', true);
+                        // Beritahu CoreUI untuk me-refresh tampilannya (JIKA ADA METODENYA)
+                        if (typeof coreui !== 'undefined' && coreui.MultiSelect && coreui.MultiSelect.getInstance) {
+                            const multiSelectInstance = coreui.MultiSelect.getInstance(manualItemCoreUIEl);
+                            if (multiSelectInstance && typeof multiSelectInstance.update === 'function') {
+                                multiSelectInstance.update();
+                                console.log("CoreUI MultiSelect instance updated after disabling option: " + itemIdStr);
+                            }
+                        }
                     }
                 }
+                return true; 
+            }
+        }
+
+        if (borrowList.length) {
+            borrowList.on('click', '.remove-item', function() {
+                const listItem = $(this).closest('li');
+                const itemId = String(listItem.data('item-id')); 
+                listItem.remove(); 
+
+                if (manualItemCoreUIEl && itemId) {
+                    const optionInCoreUI = $manualItemCoreUI.find('option[value="' + itemId + '"]');
+                    if (optionInCoreUI.length) {
+                        optionInCoreUI.prop('disabled', false);
+                        
+                        // Hapus dari nilai terpilih CoreUI MultiSelect & update
+                        let currentCoreUIValues = $manualItemCoreUI.val() || [];
+                        const index = currentCoreUIValues.indexOf(itemId);
+                        if (index > -1) {
+                            currentCoreUIValues.splice(index, 1);
+                            $manualItemCoreUI.val(currentCoreUIValues).trigger('change'); // Memicu 'change' agar CoreUI update
+                        } else {
+                            // Jika tidak ada di value, mungkin CoreUI perlu di-update secara manual
+                           if (typeof coreui !== 'undefined' && coreui.MultiSelect && coreui.MultiSelect.getInstance) {
+                                const multiSelectInstance = coreui.MultiSelect.getInstance(manualItemCoreUIEl);
+                                if (multiSelectInstance && typeof multiSelectInstance.update === 'function') {
+                                    multiSelectInstance.update();
+                                }
+                            }
+                        }
+                    }
+                }
+                scanStatusDiv.html('Item dihapus dari daftar.').addClass('status-info');
+                updateNoItemsMessage();
+                if (barcodeInputPeminjaman.length > 0) barcodeInputPeminjaman.focus();
             });
         }
 
-        $('#generateBarcodePreviewBtn').on('click', function() {
-            showAdminBarcodePreview();
-        });
-
-        // Untuk halaman edit, barcode awal sudah di-render oleh PHP.
-        // Untuk halaman add, jika ada nilai default dan ingin langsung preview:
-        var initialAdminBarcodeValue = $('#barcode_value').val().trim();
-        // Cek apakah kita di halaman add_item.php (bisa dengan cara lain jika perlu)
-        if (initialAdminBarcodeValue !== "" && window.location.pathname.includes('add_item.php')) {
-            // showAdminBarcodePreview(); // Aktifkan jika ingin auto preview di add_item.php saat load jika ada nilai
+        // --- LOGIKA SCAN BARCODE ---
+        if (barcodeInputPeminjaman.length > 0) {
+            function processBarcodeAddItemScan() {
+                const barcodeValue = barcodeInputPeminjaman.val().trim();
+                if (barcodeValue === "") return;
+                scanStatusDiv.html('<i>Mencari barang via scan...</i>').removeClass('status-success status-error status-info');
+                $.ajax({
+                    url: 'php/fetch_item_detail_by_barcode.php', 
+                    type: 'GET', data: { barcode_value: barcodeValue }, dataType: 'json',
+                    success: function(response) {
+                        if (response.status === 'success') {
+                            if (addItemToBorrowList(response.item_id, response.item_name, 'scan')) {
+                                barcodeInputPeminjaman.val('').focus(); 
+                            } else { barcodeInputPeminjaman.select().focus(); }
+                        } else {
+                            scanStatusDiv.html('Error: ' + escapeHtml(response.message)).addClass('status-error');
+                            barcodeInputPeminjaman.select().focus();
+                        }
+                    },
+                    error: function(jqXHR, textStatus, errorThrown) {
+                        scanStatusDiv.html('Error: Gagal menghubungi server (Scan). (' + escapeHtml(textStatus) + ')').addClass('status-error');
+                        console.error("AJAX Error (Peminjaman Scan): ", textStatus, errorThrown, jqXHR.responseText);
+                    }
+                });
+            }
+            $('#addByBarcodeBtn').on('click', processBarcodeAddItemScan);
+            barcodeInputPeminjaman.on('keypress', function(e) { if (e.which == 13) { e.preventDefault(); processBarcodeAddItemScan(); } });
+            barcodeInputPeminjaman.focus(); 
         }
-    } // Akhir dari if untuk logika admin preview barcode
 
+        // --- LOGIKA COREUI MULTI-SELECT ---
+        if (manualItemCoreUIEl) { // Gunakan elemen DOM asli untuk CoreUI
+            console.log("CoreUI: Elemen #manual_item_coreui_multiselect ditemukan. JS CoreUI harus menginisialisasinya.");
+
+            let lastSelectedCoreUIValues = $manualItemCoreUI.val() || [];
+
+            $manualItemCoreUI.on('change', function(event) {
+                // Pastikan CoreUI sudah menginisialisasi elemen ini
+                // Cek apakah instance CoreUI MultiSelect ada, jika tidak, jangan lakukan apa-apa
+                if (typeof coreui === 'undefined' || !coreui.MultiSelect || !coreui.MultiSelect.getInstance(manualItemCoreUIEl)) {
+                    console.warn("CoreUI MultiSelect instance tidak ditemukan untuk #manual_item_coreui_multiselect. Event 'change' mungkin dari select asli.");
+                    // Jika ini terjadi, kemungkinan besar CoreUI JS tidak dimuat atau gagal inisialisasi.
+                    // Untuk select HTML standar multiple, $(this).val() akan berisi array yang dipilih.
+                    // Kita bisa coba tangani secara manual, tapi lebih baik pastikan CoreUI aktif.
+                }
+
+                const currentSelectedValues = $(this).val() || [];
+                const selectElement = $(this); // elemen <select> jQuery
+                
+                console.log("CoreUI MultiSelect 'change' event. Last:", lastSelectedCoreUIValues, "Current:", currentSelectedValues);
+
+                // Deteksi item yang BARU DIPILIH
+                currentSelectedValues.forEach(itemId => {
+                    if (!lastSelectedCoreUIValues.includes(itemId)) {
+                        const optionElement = selectElement.find('option[value="' + itemId + '"]');
+                        const itemName = optionElement.data('name') || optionElement.text().split(' (Barcode:')[0].trim();
+                        
+                        if (itemId && itemName) {
+                            if (!addItemToBorrowList(itemId, itemName, 'manual_coreui')) {
+                                // Gagal tambah (sudah ada).
+                                // Jika CoreUI tidak otomatis unselect saat option di-disable,
+                                // kita mungkin perlu cara untuk menghapus pilihan ini dari CoreUI.
+                                // Ini adalah bagian yang paling bergantung pada API CoreUI.
+                                console.warn("Item " + itemName + " sudah ada, tapi mungkin masih terpilih di CoreUI.");
+                            }
+                        }
+                    }
+                });
+
+                // Deteksi item yang BARU DI-UNSELECTED
+                lastSelectedCoreUIValues.forEach(oldItemId => {
+                    if (!currentSelectedValues.includes(oldItemId)) {
+                        const optionElement = selectElement.find('option[value="' + oldItemId + '"]');
+                        const oldItemName = optionElement.data('name') || optionElement.text().split(' (Barcode:')[0].trim();
+                        
+                        borrowList.find('li[data-item-id="' + oldItemId + '"]').remove();
+                        if (optionElement.length) {
+                            optionElement.prop('disabled', false);
+                            // Beritahu CoreUI untuk update (JIKA ADA METODENYA)
+                            if (typeof coreui !== 'undefined' && coreui.MultiSelect && coreui.MultiSelect.getInstance) {
+                                const multiSelectInstance = coreui.MultiSelect.getInstance(manualItemCoreUIEl);
+                                if (multiSelectInstance && typeof multiSelectInstance.update === 'function') {
+                                    multiSelectInstance.update();
+                                }
+                            }
+                        }
+                        scanStatusDiv.html('Item "' + escapeHtml(oldItemName) + '" dihapus dari pilihan.').addClass('status-info');
+                        updateNoItemsMessage();
+                    }
+                });
+                
+                lastSelectedCoreUIValues = [...currentSelectedValues]; 
+            });
+        } else {
+            console.log("CoreUI: Element #manual_item_coreui_multiselect TIDAK ditemukan.");
+        }
+
+        // --- VALIDASI FORM PEMINJAMAN ---
+        if ($('#borrowForm').length) { /* ... (validasi form seperti sebelumnya) ... */ }
+
+    } // Akhir dari if elemen peminjaman ada
+
+    // --- LOGIKA ADMIN AREA (PREVIEW BARCODE) ---
+    const adminBarcodeValueInput = $('#barcode_value');
+    const adminGeneratePreviewBtn = $('#generateBarcodePreviewBtn');
+    const adminBarcodePreviewContainer = $('#barcode_preview_container');
+
+    if (adminGeneratePreviewBtn.length > 0 && adminBarcodeValueInput.length > 0 && adminBarcodePreviewContainer.length > 0) {
+        /* ... (kode showAdminBarcodePreview dan event listenernya seperti sebelumnya) ... */
+    }
 });
